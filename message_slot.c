@@ -37,7 +37,10 @@ static int device_open( struct inode* inode,
   int found;
   minorChannel* mychannel;
   minorChannel* newhead;
-
+if(file < 0){
+    printk("Bad File Descriptor provided\n");
+    return -EINVAL;
+  }
  if(HEAD == NULL){
      HEAD =(minorChannel *) kmalloc(sizeof(minorChannel),GFP_KERNEL);
      if(HEAD==NULL){
@@ -107,11 +110,11 @@ printk("=============Reading============\n");
     }
       myMinorChannel=myMinorChannel->nextMinorChannel;
   }
-  if(!found){
-    printk("no this file has never been opened before\n");
-    return -1;
-  }
   channelnum=(int)file->private_data;
+  if(channelnum==0){
+    printk("no channel was made on this device\n");
+    return -EINVAL;
+  }
   found =0;
   myChannel=myMinorChannel->myNode;
   while(myChannel!=NULL){
@@ -122,7 +125,7 @@ printk("=============Reading============\n");
     myChannel=myChannel->nextChannel;
   }
   if(!found){ // trying to read from a channel which was not ioctaled.
-	printk("channel was never created\n");
+	  printk("channel was never created\n");
     return -EINVAL;
   }
   /* 
@@ -132,11 +135,13 @@ printk("=============Reading============\n");
 
   while((bytesRead<BUFFSIZE)&& bytesRead< strlen(myChannel->data)){
     if(put_user(myChannel->data[bytesRead],&buffer[bytesRead])!=0){
+    printk("Something went wrong on writing to user\n");
 		return -ENOSPC;
 	}
     bytesRead++;
   }
   if(bytesRead==0){ 
+    printk("no message to read\n");
     return -EWOULDBLOCK;
   }
   myChannel->data[0]='\0';
@@ -160,6 +165,7 @@ printk("=============Writing %s============\n",buffer);
   byteswritten=0;
   minorNumber=iminor(file->f_path.dentry->d_inode);
   if(length>BUFFSIZE || length<1){
+    printk("something is wrong with the provided length\n");
     return -EMSGSIZE;
   }
   if(HEAD == NULL){
@@ -175,9 +181,14 @@ printk("=============Writing %s============\n",buffer);
       myMinorChannel=myMinorChannel->nextMinorChannel;
   }
   if(!found){
-    return -1;
+    printk("Device was never opened\n");
+    return -EINVAL;
   }
   channelnum=(int)file->private_data;
+  if(channelnum==0){
+    printk("no channel was opened on this device\n");
+    return -EINVAL;
+  }
   found =0;
   myChannel=myMinorChannel->myNode;
   while(myChannel!=NULL){
@@ -194,8 +205,6 @@ printk("=============Writing %s============\n",buffer);
     get_user(myChannel->data[byteswritten],&buffer[byteswritten]);
     byteswritten++;
   }
-  printk("%s",myChannel->data);
-
   return byteswritten;
 
 }
@@ -210,16 +219,20 @@ static long device_ioctl( struct   file* file,
   // Switch according to the ioctl called
    int minorNum;
    minorChannel* mychannel;
+   Channel* foundChannel;
+   if(file < 0){
+    printk("Bad File Descriptor provided\n");
+    return -EINVAL;
+  }
    if(MSG_SLOT_CHANNEL!=ioctl_command_id){
 		return -EINVAL;
 	}
   if(ioctl_param==0) return -EINVAL;
-  if(ioctl_param){
-    minorNum=iminor(file->f_path.dentry->d_inode);;
-    mychannel=HEAD;
-     if(mychannel==NULL){ // file has not been opened
-        printk("no insmod opertion was ran on this driver\n");
-        return 1;
+  minorNum=iminor(file->f_path.dentry->d_inode);;
+  mychannel=HEAD;
+    if(mychannel==NULL){ // file has not been opened
+      printk("no insmod opertion was ran on this driver\n");
+        return -1;
 
     }
     while(mychannel && mychannel->minorNum!=minorNum){
@@ -228,28 +241,29 @@ static long device_ioctl( struct   file* file,
 
     if(mychannel==NULL){ // file has not been opened
         printk("File has not been opened hence its minor node was not found\n");
-        return 1;
+        return -1;
 
     }
 
-    Channel* foundChannel=mychannel->myNode;
+  foundChannel=mychannel->myNode;
     while(foundChannel){
       if(foundChannel->numChannel==ioctl_param) break;
       foundChannel=foundChannel->nextChannel;
     }
     if(foundChannel ==NULL){ // channel has not been created
+      if(mychannel->numOfChannels==CHANNELNUMLIMIT){
+        printk("maximum number of channels reached\n");
+        return -1;
+      }
       foundChannel=(Channel*) kmalloc(sizeof(Channel),GFP_KERNEL);
       foundChannel->nextChannel=mychannel->myNode;
       foundChannel->numChannel=ioctl_param;
       mychannel->myNode=foundChannel;
+      mychannel->numOfChannels++;
     }
     file->private_data=(void*) ioctl_param;
-  }
-  else{
+  
 
-	printk("else in ioctl\n");
-    return -1;
-  }
   return SUCCESS;
 
 }

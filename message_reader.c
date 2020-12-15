@@ -16,30 +16,24 @@ int main(int argc, char* argv[]){
     if (argc!=3){
         exit(1);
     }
-    char* file_path;
-    int target_id, fd, bytes_read;
+    int target_id, fd, bytesRead;
     char buffer[BUFFSIZE];
-    file_path = argv[1];
     target_id = atoi(argv[2]);
-    fd = open(file_path, O_RDWR);
+    fd = open(argv[1], O_RDWR);
     if(fd < 0){
-	printf("couldn't open file\n");
+	    strerror(EBADR);
         exit(1);
     }
     if(ioctl(fd, MSG_SLOT_CHANNEL, target_id)!=SUCCESS){
-	printf("ioctl fail\n");
+	    strerror(ENODATA);
         exit(1);
     }
-    bytes_read = read(fd,buffer,target_id);
-    if (bytes_read < 0){
-	printf("NONE READ\n");
+    bytesRead= read(fd,buffer,target_id);
+    if (bytesRead < 0){
+	    strerror(ENODATA);
         exit(1);
     }
-    if (bytes_read<BUFFSIZE){
-        buffer[bytes_read] = '\0';
-    }
-    printf("%d bytes read from %s\n",bytes_read,file_path);
-    printf("%s\n",buffer);
+    write(STDOUT_FILENO ,buffer,bytesRead);
     return SUCCESS;
 
 
