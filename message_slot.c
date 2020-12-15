@@ -18,14 +18,14 @@
 MODULE_LICENSE("GPL");
 typedef struct Channel{
   int numChannel;
-  int written;
   char data[BUFFSIZE];
   struct Channel * nextChannel;
 } Channel;
 
 // muliple driver copies, found by looking at iminor
 typedef struct minorChannel{
-    int minorNum;
+    unsigned int minorNum;
+    unsigned int numOfChannels;
     Channel* myNode;
     struct minorChannel * nextMinorChannel;
  } minorChannel;
@@ -37,13 +37,17 @@ static int device_open( struct inode* inode,
   int found;
   minorChannel* mychannel;
   minorChannel* newhead;
+
+ if(HEAD == NULL){
+     HEAD =(minorChannel *) kmalloc(sizeof(minorChannel),GFP_KERNEL);
+     if(HEAD==NULL){
+       printk("KMALLOC HAS FAILED couldn't create head\n");
+       return -EINVAL;
+	}
+    HEAD->minorNum=0;
+	}
   mychannel=HEAD;
   found=0;
-  printk("Invoking device_open(%p)\n", file);
-  if(HEAD == NULL){
-    printk("insmod has not been called\b");
-	  return 1;
-  }
   while(!found && mychannel!=NULL){
     if(mychannel->minorNum==iminor(inode)){
       found=1;
@@ -55,8 +59,7 @@ static int device_open( struct inode* inode,
       newhead=(minorChannel*)kmalloc(sizeof(minorChannel),GFP_KERNEL);
       if(newhead==NULL) { // kmalloc failed  
         printk("kmalloc has failed on opening file\n");
-        //errno = -EINVAL;
-        return 1;
+        return -EINVAL;
       }
     newhead->nextMinorChannel=HEAD;
     HEAD=newhead;
@@ -119,29 +122,23 @@ printk("=============Reading============\n");
     myChannel=myChannel->nextChannel;
   }
   if(!found){ // trying to read from a channel which was not ioctaled.
-    printk("something went wrong, the channel wasn't found\n");
+	printk("channel was never created\n");
     return -EINVAL;
   }
   /* 
     we found our node with the right minor num and the right channel num, we just
     need to read from it now
   */
-  	if(myChannel->data[0]){
- 		printk("%s\n",myChannel->data);
-	}
 
   while((bytesRead<BUFFSIZE)&& bytesRead< strlen(myChannel->data)){
-    put_user(myChannel->data[bytesRead],&buffer[bytesRead]);
+    if(put_user(myChannel->data[bytesRead],&buffer[bytesRead])!=0){
+		return -ENOSPC;
+	}
     bytesRead++;
   }
   if(bytesRead==0){ 
-   printk("nothing read\n");
-    return -1;
+    return -EWOULDBLOCK;
   }
-   printk( "Invocing device_read(%p,%ld) - "
-          "operation not supported yet\n"
-          "(last written - %s)\n",
-          file, length, buffer );
   myChannel->data[0]='\0';
   return bytesRead;
 
@@ -163,8 +160,7 @@ printk("=============Writing %s============\n",buffer);
   byteswritten=0;
   minorNumber=iminor(file->f_path.dentry->d_inode);
   if(length>BUFFSIZE || length<1){
-    //perror("but length for read\n");
-    return -1;
+    return -EMSGSIZE;
   }
   if(HEAD == NULL){
     printk("insmod has not been called\b");
@@ -179,7 +175,6 @@ printk("=============Writing %s============\n",buffer);
       myMinorChannel=myMinorChannel->nextMinorChannel;
   }
   if(!found){
-    //perror("no this file has never been opened before\n");
     return -1;
   }
   channelnum=(int)file->private_data;
@@ -200,7 +195,7 @@ printk("=============Writing %s============\n",buffer);
     byteswritten++;
   }
   printk("%s",myChannel->data);
-  myChannel->written=1;
+
   return byteswritten;
 
 }
@@ -215,7 +210,11 @@ static long device_ioctl( struct   file* file,
   // Switch according to the ioctl called
    int minorNum;
    minorChannel* mychannel;
-  if(ioctl_param && MSG_SLOT_CHANNEL==ioctl_command_id){
+   if(MSG_SLOT_CHANNEL!=ioctl_command_id){
+		return -EINVAL;
+	}
+  if(ioctl_param==0) return -EINVAL;
+  if(ioctl_param){
     minorNum=iminor(file->f_path.dentry->d_inode);;
     mychannel=HEAD;
      if(mychannel==NULL){ // file has not been opened
@@ -275,20 +274,12 @@ struct file_operations Fops =
 static int __init simple_init(void)
 {
 	int retvalue;
-   if(HEAD == NULL){
-     HEAD =(minorChannel *) kmalloc(sizeof(minorChannel),GFP_KERNEL);
-     if(HEAD==NULL){
-       printk("KMALLOC HAS FAILED DEVICE WAS NOT OPENED\n");
-       return -EINVAL;
-	}
-    HEAD->minorNum=-1;
-	}
-    printk("Driver Has Been Loaded and Head Has Been Created\n");
-
+  
     retvalue=register_chrdev(MAJOR_NUM,DEVICE_RANGE_NAME,&Fops);
     if (retvalue<0){
-        printk(KERN_ALERT "error in %d register_crdev",retvalue);
+        printk(KERN_ERR "error in %d register_MessageSlot",retvalue);
     }
+
     printk(KERN_INFO "message_slot registered major number %d\n",MAJOR_NUM);
     return SUCCESS;
 }

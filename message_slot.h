@@ -9,7 +9,7 @@
 // number at compile time.
 
 #define MAJOR_NUM 240
-
+#define CHANNELNUMLIMIT 1048576
 // Set the message of the device driver
 #define MSG_SLOT_CHANNEL _IOW(MAJOR_NUM, 0, unsigned long)
 

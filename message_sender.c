@@ -9,46 +9,29 @@
 #include <stdlib.h>
 #include <errno.h>
 #include "message_slot.h"
-#define SUCCESS 0
-#define FAILURE 1
 
-void check_parameters(int argc){
-    if (argc!=4){
-	printf("hallo");
-        exit(FAILURE);
-    }
 
-}
 
 int main(int argc, char* argv[]){
     char* file_path;
     int target_id, fd, bytes_written;
     char* message;
-
-    check_parameters(argc);
-
+    if(argc<4) exit(1);
     file_path = argv[1];
     target_id = atoi(argv[2]);
     message = argv[3];
     fd = open(file_path, O_RDWR);
-	printf("%s\n",file_path);
     if(fd < 0){
-	printf("Oh dear, something went wrong with read()! %s\n", strerror(errno));
-	printf("fail 1 %d\n",fd);
-
-        exit(FAILURE);
+        exit(1);
     }
     if(ioctl(fd, MSG_SLOT_CHANNEL, target_id)!=SUCCESS){
-	printf("fail ioctl");
-        exit(FAILURE);
+        exit(1);
     }
-    bytes_written = write(fd, message, strlen(message));
+    bytes_written = write(fd, message, strlen(message)-1);
     if(bytes_written < 0 ){
-	printf("ailr write");
-        exit(FAILURE);
+        exit(1);
     }
     printf("message sender succeded, number of bytes written = %d\n",bytes_written);
-    exit(SUCCESS);
     return 0;
 
 
