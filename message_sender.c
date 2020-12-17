@@ -14,7 +14,7 @@
 
 int main(int argc, char* argv[]){
     char* file_path;
-    int target_id, fd, bytes_written;
+    int fd, bytes_written,target_id;
     char* message;
     if(argc<4) exit(1);
     file_path = argv[1];
@@ -25,24 +25,17 @@ int main(int argc, char* argv[]){
         strerror(EBADR);
         exit(1);
     }
-    if(ioctl(fd, MSG_SLOT_CHANNEL, target_id)!=SUCCESS){
+    if (ioctl(fd, MSG_SLOT_CHANNEL, target_id)!=SUCCESS){
         strerror(EIO);
         exit(1);
     }
     if(strlen(message)){
         bytes_written = write(fd, message, strlen(message));
-    if(bytes_written < 0 ){
-        strerror(ENOMSG);
-        exit(1);
-    }
+    	if(bytes_written < 0 ){
+        	strerror(ENOMSG);
+      	  	exit(1);
+  	  }
     }
     printf("message sender succeded, number of bytes written = %d\n",bytes_written);
-    return 0;
-
-
-
-
-
-    
-    
+    return 0;  
 }

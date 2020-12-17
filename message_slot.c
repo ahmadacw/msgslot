@@ -19,6 +19,7 @@ MODULE_LICENSE("GPL");
 typedef struct Channel{
   int numChannel;
   char data[BUFFSIZE];
+  int lengthOfMessage;
   struct Channel * nextChannel;
 } Channel;
 
@@ -94,7 +95,11 @@ static ssize_t device_read( struct file* file,
   int minorNumber;
   Channel* myChannel;
   minorChannel* myMinorChannel;
-printk("=============Reading============\n");
+  if(!buffer){
+		printk("provided buffer is null\n");
+		return -EINVAL;
+	}
+  printk("=============Reading============\n");
   found=0;
   bytesRead=0;
   minorNumber=iminor(file->f_path.dentry->d_inode);
@@ -132,19 +137,26 @@ printk("=============Reading============\n");
     we found our node with the right minor num and the right channel num, we just
     need to read from it now
   */
-
-  while((bytesRead<BUFFSIZE)&& bytesRead< strlen(myChannel->data)){
+  if(myChannel->lengthOfMessage > length){
+		printk("provided buffer is not big enough\n");
+		return -ENOSPC;
+	}
+  while(bytesRead< myChannel->lengthOfMessage){
     if(put_user(myChannel->data[bytesRead],&buffer[bytesRead])!=0){
-    printk("Something went wrong on writing to user\n");
+    		printk("Something went wrong on writing to user\n");
 		return -ENOSPC;
 	}
     bytesRead++;
   }
+  if(bytesRead<myChannel->lengthOfMessage){
+		printk("provided buffer is not long enough\n");
+		return -ENOSPC;
+	}
   if(bytesRead==0){ 
     printk("no message to read\n");
     return -EWOULDBLOCK;
   }
-  myChannel->data[0]='\0';
+  myChannel->lengthOfMessage=0;
   return bytesRead;
 
 }
@@ -160,11 +172,13 @@ static ssize_t device_write( struct file*       file,
   int found,byteswritten,minorNumber,channelnum;
   minorChannel* myMinorChannel;
   Channel* myChannel;
-printk("=============Writing %s============\n",buffer);
+//printk("=============Writing %s============\n",buffer);
   found=0;
   byteswritten=0;
   minorNumber=iminor(file->f_path.dentry->d_inode);
-  if(length>BUFFSIZE || length<1){
+  if(length<0) return -EMSGSIZE;
+  if(!buffer) return -EMSGSIZE;
+  if(strlen(buffer)>BUFFSIZE || strlen(buffer)<1){
     printk("something is wrong with the provided length\n");
     return -EMSGSIZE;
   }
@@ -199,12 +213,17 @@ printk("=============Writing %s============\n",buffer);
     myChannel=myChannel->nextChannel;
   }
   if(!found){ // trying to write to a channel which was not ioctaled.
+	printk(" channel #%d was never created",channelnum);
     return -EINVAL;
   }
   while(byteswritten<BUFFSIZE && byteswritten< length){
-    get_user(myChannel->data[byteswritten],&buffer[byteswritten]);
+    if(get_user(myChannel->data[byteswritten],&buffer[byteswritten])!=0){
+		printk("something is wrong with the provided buffer\n");
+		return -EINVAL;
+	}
     byteswritten++;
   }
+   myChannel->lengthOfMessage=byteswritten;
   return byteswritten;
 
 }
